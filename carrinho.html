@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrinho — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<div class="wrap pg"><h1>Carrinho de reservas</h1><p>Confira as datas e os itens, informe o endereço do evento e escolha como pagar.</p></div>
+<main class="wrap" id="main">
+<p class="vazio" id="cv" hidden>Seu carrinho está vazio. <a href="catalogo.html">Ver o catálogo</a></p>
+<div class="col2" id="cx">
+<div>
+<section class="bloco"><h2>1. Datas do evento</h2>
+<div class="dois"><label>Início<input id="di" type="date"></label><label>Fim<input id="df" type="date"></label></div>
+<p id="per" class="nota"></p></section>
+<section class="bloco"><h2>2. Itens</h2><div id="its" style="display:grid;gap:.8rem"></div></section>
+<section class="bloco"><h2>3. Endereço do evento</h2>
+<div class="dois"><label>CEP<input id="cep" inputmode="numeric" maxlength="9" placeholder="00000-000" autocomplete="postal-code"></label><label>Número<input id="num" maxlength="10"></label></div>
+<label>Rua / logradouro<input id="rua" maxlength="120" autocomplete="address-line1"></label>
+<div class="dois"><label>Complemento<input id="comp" maxlength="60"></label><label>Bairro<input id="bai" maxlength="60"></label></div>
+<div class="dois"><label>Cidade<input id="cid" maxlength="60"></label><label>UF<input id="uf" maxlength="2"></label></div>
+<p id="fr" class="nota">Informe o CEP para calcular o frete de entrega e coleta.</p></section>
+<section class="bloco"><h2>4. Pagamento</h2>
+<div class="pags">
+<label class="chk"><input type="radio" name="pg" value="Cartão de Crédito" checked> Cartão de crédito</label>
+<label class="chk"><input type="radio" name="pg" value="PIX"> PIX</label>
+<label class="chk"><input type="radio" name="pg" value="Boleto"> Boleto bancário</label></div>
+<div id="cartao" style="display:grid;gap:.8rem">
+<label>Número do cartão<input id="cn" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" maxlength="23"></label>
+<label>Nome impresso no cartão<input id="cnome" autocomplete="cc-name"></label>
+<div class="dois"><label>Validade (MM/AA)<input id="cval" placeholder="MM/AA" maxlength="5" autocomplete="cc-exp"></label><label>CVV<input id="ccvv" inputmode="numeric" maxlength="4" autocomplete="cc-csc"></label></div>
+<label>Parcelas<select id="cpar"></select></label>
+<p class="nota">Simulação: use um número de cartão válido (ex.: 4242 4242 4242 4242). Cartões terminados em 0002 são recusados.</p></div>
+<p id="pgn" class="nota"></p></section>
+</div>
+<aside class="bloco resumo"><h2>Resumo</h2><dl class="dados" id="res"></dl><p class="msg" id="msg" role="alert"></p><button class="btn" id="fin">Finalizar pedido</button></aside>
+</div>
+</main>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("carrinho");
+let C=cart(),L=[],P=null,ER="",fr=null;
+const msg=t=>$("#msg").textContent=t;
+$("#di").min=hoje();$("#df").min=hoje();
+$("#cpar").innerHTML=[1,2,3,4,5,6].map(n=>`<option value="${n}">${n}x ${n>1?"sem juros":"à vista"}</option>`).join("");
+if(!U.cliente)$("#fin").textContent="Entrar para finalizar";
+
+function desenho(){
+const ids=Object.keys(C.itens).map(Number);
+$("#its").innerHTML=ids.map(id=>{const i=L.find(x=>x.id===id);
+if(!i)return `<div class="linha"><span></span><div class="lt"><strong>Item indisponível</strong></div><span></span><button class="btn sec sm" data-rm="${id}">Remover</button></div>`;
+const q=C.itens[id],lim=P?i.disp:i.estoque;
+return `<div class="linha"><span class="mini" style="${bg(i)}">${+i.foto?"":emoji(i.categoria)}</span><div class="lt"><strong>${esc(i.nome)}</strong><small class="nota">${brl(i.preco)} / diária</small>${q>lim?`<small class="no">Disponível nas datas: ${lim}</small>`:""}</div><input class="qt" type="number" min="1" max="${lim}" value="${q}" data-id="${id}" aria-label="Quantidade de ${esc(i.nome)}"><button class="btn sec sm" data-rm="${id}">Remover</button></div>`}).join("");
+const n=P?P.n:0,sub=n*ids.reduce((s,id)=>{const i=L.find(x=>x.id===id);return s+(i?i.preco*C.itens[id]:0)},0),tot=sub+(fr?fr.total:0);
+$("#res").innerHTML=`<dt>Itens (${n} ${n===1?"diária":"diárias"})</dt><dd>${brl(sub)}</dd><dt>Entrega</dt><dd>${fr?brl(fr.entrega):"—"}</dd><dt>Coleta</dt><dd>${fr?brl(fr.coleta):"—"}</dd><dt><strong>Total</strong></dt><dd><strong>${brl(tot)}</strong></dd>`}
+
+/* busca os itens do carrinho no servidor (preço e disponibilidade nas datas escolhidas) */
+async function carregar(){
+try{
+C=cart();const ids=Object.keys(C.itens);
+$("#cv").hidden=ids.length>0;$("#cx").hidden=!ids.length;
+if(!ids.length)return;
+$("#di").value=C.inicio;$("#df").value=C.fim;
+let d;P=null;ER="";
+if(C.inicio&&C.fim){try{d=await api("itens",undefined,{inicio:C.inicio,fim:C.fim});P={n:dias(C.inicio,C.fim)}}catch(e){ER=e.message}}else ER="Informe as datas do evento.";
+if(!d)d=await api("itens");
+CATS=d.categorias;L=d.itens;
+$("#per").innerHTML=ER?`<span class="no">${esc(ER)}</span>`:`${P.n} ${P.n>1?"diárias":"diária"} de aluguel.`;
+desenho()}catch(e){toast(e.message)}}
+
+$("#di").oninput=$("#df").oninput=()=>{const c=cart();c.inicio=$("#di").value;c.fim=$("#df").value;setCart(c);carregar()};
+$("#its").onchange=e=>{const t=e.target.closest(".qt");if(!t)return;const c=cart();c.itens[t.dataset.id]=Math.max(1,Math.floor(+t.value)||1);setCart(c);atualizaCarrinho();carregar()};
+$("#its").onclick=e=>{const b=e.target.closest("[data-rm]");if(!b)return;const c=cart();delete c.itens[b.dataset.rm];setCart(c);atualizaCarrinho();carregar()};
+
+/* frete calculado no servidor a partir do CEP */
+$("#cep").oninput=async()=>{const c=$("#cep").value.replace(/\D/g,"");
+if(c.length!==8){fr=null;$("#fr").textContent="Informe o CEP para calcular o frete de entrega e coleta.";desenho();return}
+try{fr=await api("frete",{cep:c});$("#fr").innerHTML=`Entrega ${brl(fr.entrega)} + coleta ${brl(fr.coleta)} = <strong>${brl(fr.total)}</strong>`}
+catch(e){fr=null;$("#fr").innerHTML=`<span class="no">${esc(e.message)}</span>`}
+desenho()};
+
+document.querySelectorAll("[name=pg]").forEach(r=>r.onchange=()=>{const m=document.querySelector("[name=pg]:checked").value;
+$("#cartao").hidden=m!=="Cartão de Crédito";
+$("#pgn").textContent=m==="PIX"?"O código PIX copia e cola é gerado ao finalizar e vale por 1 dia.":m==="Boleto"?"O boleto é gerado ao finalizar e vence em 3 dias.":""});
+
+function confirmacao(r){const g=r.pagamento;
+$("#main").innerHTML=`<div class="authbox" style="max-width:36rem;display:grid;gap:.8rem"><h1>Pedido #${r.id} recebido!</h1><p>Total: <strong>${brl(r.total)}</strong></p>`+
+(g.metodo==="Cartão de Crédito"?`<p class="ok">Pagamento aprovado no cartão final ${esc(g.final)} (${g.parcelas}x). Seu pedido já está <strong>Confirmado</strong>.</p>`
+:`<p>${g.metodo==="PIX"?"Pague com o PIX copia e cola":"Pague o boleto (linha digitável)"} até <strong>${fd(g.venc)}</strong>:</p><textarea readonly rows="3" id="cod">${esc(g.codigo)}</textarea><button class="btn sec" id="cp">Copiar código</button><p class="nota">O pedido será confirmado quando o pagamento for identificado. Este é um ambiente de demonstração.</p>`)+
+`<a class="btn" href="meus-pedidos.html">Acompanhar pedido</a></div>`;
+const c=$("#cp");if(c)c.onclick=()=>{if(navigator.clipboard)navigator.clipboard.writeText($("#cod").value);toast("Código copiado!")}}
+
+$("#fin").onclick=async()=>{
+if(!U.cliente){location.href="login.html?next=carrinho.html";return}
+msg("");
+const m=document.querySelector("[name=pg]:checked").value;
+const end={cep:$("#cep").value,logradouro:$("#rua").value,numero:$("#num").value,complemento:$("#comp").value,bairro:$("#bai").value,cidade:$("#cid").value,uf:$("#uf").value};
+const pag={metodo:m,numero:$("#cn").value,nome:$("#cnome").value,validade:$("#cval").value,cvv:$("#ccvv").value,parcelas:+$("#cpar").value};
+$("#fin").disabled=true;
+try{const r=await api("pedido",{inicio:C.inicio,fim:C.fim,itens:Object.entries(C.itens).map(([id,qtd])=>({id:+id,qtd})),end,pag});
+setCart(vazio());atualizaCarrinho();confirmacao(r)}
+catch(x){msg(x.message);$("#fin").disabled=false;carregar()}};
+
+carregar();
+})();
+</script>
+</body>
+</html>

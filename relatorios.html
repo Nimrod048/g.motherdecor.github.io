@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatórios — Painel administrativo — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<main class="wrap admin-main">
+<h1 style="font:700 2.1rem var(--serif);margin:0 0 1rem">Relatórios gerenciais</h1>
+<section class="filtros" aria-label="Período">
+<label>Eventos a partir de<input id="de" type="date"></label>
+<label>Eventos até<input id="ate" type="date"></label>
+<button class="btn" id="go">Gerar relatórios</button>
+</section>
+<div id="rel"></div>
+</main>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("relatorios");
+if(!guarda(U))return;
+$("#de").value=soma(hoje(),-30);$("#ate").value=soma(hoje(),30);
+const tab=(h,r)=>`<div class="tw"><table><thead><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${r.length?r.map(l=>`<tr>${l.map(c=>`<td>${c}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${h.length}" class="vazio">Sem dados no período.</td></tr>`}</tbody></table></div>`;
+function desenha(d){
+$("#rel").innerHTML=`<div class="kpis"><div><small>Faturamento no período</small><strong>${brl(d.total)}</strong></div><div><small>Pedidos faturados</small><strong>${d.pedidos}</strong></div><div><small>Cobranças complementares pagas</small><strong>${brl(d.cobrancas)}</strong></div><div><small>Ociosidade do acervo</small><strong>${d.ocio.geral}%</strong></div></div>
+<h2>Faturamento por mês</h2>${tab(["Mês","Pedidos","Valor"],d.faturamento.map(x=>[x.mes.split("-").reverse().join("/"),x.pedidos,brl(x.valor)]))}
+<h2>Itens mais alugados</h2>${tab(["Decoração","Unidades","Diárias","Valor"],d.top.map(x=>[esc(x.nome),x.unidades,x.diarias,brl(x.valor)]))}
+<h2>Taxa de ociosidade do acervo</h2><p class="nota">Percentual de unidades-dia sem aluguel no período (quanto menor, melhor o aproveitamento).</p>${d.ocio.itens.map(x=>`<div class="oc"><span>${esc(x.nome)}</span><div class="bar"><i style="width:${x.ocio}%"></i></div><b>${x.ocio}%</b></div>`).join("")}
+<h2>Histórico de clientes</h2>${tab(["Cliente","E-mail","Pedidos","Total gasto","Último evento"],d.clientes.map(x=>[esc(x.nome),esc(x.email),x.pedidos,brl(x.gasto),x.ultimo?fd(x.ultimo):"—"]))}`}
+async function gerar(){try{desenha(await api("relatorios",undefined,{de:$("#de").value,ate:$("#ate").value}))}catch(e){$("#rel").innerHTML=`<p class="vazio">${esc(e.message)}</p>`}}
+$("#go").onclick=gerar;gerar();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus pedidos — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<div class="wrap pg"><h1>Meus pedidos</h1><p>Acompanhe o histórico de aluguéis e o status atual de cada pedido.</p></div>
+<main class="wrap"><div id="lista"></div></main>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("pedidos");
+const lista=$("#lista");
+if(!U.cliente){lista.innerHTML=`<p class="vazio"><a href="login.html?next=meus-pedidos.html">Entre na sua conta</a> para ver seus pedidos.</p>`;return}
+const ET=["Pendente","Confirmado","Em Trânsito","Concluído"];
+function card(r){
+const k=ET.indexOf(r.status),pend=r.pg_status==="Pendente"&&r.status!=="Cancelado";
+return `<article class="pedido"><header><h2>Pedido #${r.id}</h2><span class="pill s${STATUS.indexOf(r.status)}">${r.status}</span></header>
+<p class="nota">Evento: ${fd(r.inicio)} a ${fd(r.fim)} (${dias(r.inicio,r.fim)} diária(s)) · ${esc(r.logradouro)}, ${esc(r.numero)} — ${esc(r.cidade)}/${esc(r.uf)}</p>
+${r.status==="Cancelado"?`<p class="no">Este pedido foi cancelado.</p>`:`<div class="etapas">${ET.map((e,i)=>`<span class="${i<=k?"on":""}">${e}</span>`).join("")}</div>`}
+<ul>${r.itens.map(x=>`<li>${x.qtd}× ${esc(x.nome)}</li>`).join("")}</ul>
+<dl class="dados"><dt>Itens</dt><dd>${brl(r.subtotal)}</dd><dt>Entrega e coleta</dt><dd>${brl(+r.frete_entrega + +r.frete_coleta)}</dd><dt>Total</dt><dd><strong>${brl(r.total)}</strong></dd><dt>Pagamento</dt><dd>${esc(r.metodo)} · <span class="${r.pg_status==="Aprovado"?"ok":"no"}">${esc(r.pg_status)}</span></dd></dl>
+${pend&&r.codigo?`<p class="nota">${r.metodo==="PIX"?"Código PIX":"Linha digitável"}${r.vencimento?` (vence em ${fd(r.vencimento)})`:""}:</p><textarea readonly rows="2">${esc(r.codigo)}</textarea>${U.demo?`<button class="btn sec sm" data-sim="${r.id}">Simular pagamento (demonstração)</button>`:""}`:""}
+${+r.cob>0?`<p class="${+r.cob_paga?"ok":"no"}">Cobrança complementar de ${brl(r.cob)} após a vistoria: ${esc(r.cob_motivo)} (${+r.cob_paga?"paga":"pendente"}).</p>`:""}
+</article>`}
+async function carregar(){
+try{const l=await api("meus");lista.innerHTML=l.length?l.map(r=>card(r)).join(""):`<p class="vazio">Você ainda não fez nenhum pedido. <a href="catalogo.html">Ver o catálogo</a></p>`}
+catch(e){lista.innerHTML=`<p class="vazio">${esc(e.message)}</p>`}}
+lista.onclick=async e=>{const b=e.target.closest("[data-sim]");if(!b)return;
+try{await api("simular",{id:+b.dataset.sim});toast("Pagamento aprovado!");carregar()}catch(x){toast(x.message)}};
+carregar();setInterval(carregar,30000); // o status do pedido é atualizado a cada 30 s
+})();
+</script>
+</body>
+</html>

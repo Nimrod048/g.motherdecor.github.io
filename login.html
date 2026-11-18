@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<main class="wrap"><div class="authbox">
+<div class="abas" id="abas"><button data-v="entrar">Entrar</button><button data-v="criar">Criar conta</button></div>
+<form id="fe">
+<label>E-mail ou CPF<input name="login" required autocomplete="username"></label>
+<label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>
+<p class="msg" role="alert"></p>
+<button class="btn">Entrar</button>
+<button type="button" class="link" data-v="recuperar">Esqueci minha senha</button>
+<span class="nota">Demonstração: maria@email.com / 123456</span>
+</form>
+<form id="fc" hidden>
+<label>Nome completo<input name="nome" required minlength="3" autocomplete="name"></label>
+<label>CPF<input name="cpf" required inputmode="numeric" placeholder="000.000.000-00"></label>
+<label>E-mail<input name="email" type="email" required autocomplete="email"></label>
+<label>Telefone / WhatsApp<input name="tel" type="tel" required autocomplete="tel"></label>
+<label>Senha (mínimo 6 caracteres)<input name="senha" type="password" required minlength="6" autocomplete="new-password"></label>
+<label>Confirmar senha<input name="senha2" type="password" required autocomplete="new-password"></label>
+<p class="msg" role="alert"></p>
+<button class="btn">Criar conta</button>
+</form>
+<form id="fr" hidden>
+<h2>Recuperar senha</h2>
+<label>E-mail ou CPF cadastrado<input name="login"></label>
+<div id="r2" hidden style="display:grid;gap:.8rem">
+<p class="nota" id="cod"></p>
+<label>Código recebido<input name="codigo" inputmode="numeric" autocomplete="one-time-code"></label>
+<label>Nova senha<input name="nova" type="password" autocomplete="new-password"></label>
+</div>
+<p class="msg" role="alert"></p>
+<button class="btn" id="env">Enviar código</button>
+<button type="button" class="link" data-v="entrar">Voltar ao login</button>
+</form>
+</div></main>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("login");
+const P=new URLSearchParams(location.search),nxt=/^[\w-]+\.html$/.test(P.get("next")||"")?P.get("next"):"catalogo.html";
+if(U.cliente){location.replace(nxt);return}
+const V={entrar:$("#fe"),criar:$("#fc"),recuperar:$("#fr")};
+let rl="";
+function ver(v){for(const k in V)V[k].hidden=k!==v;$("#abas").hidden=v==="recuperar";$("#r2").hidden=true;$("#env").textContent="Enviar código";
+document.querySelectorAll("#abas button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));document.querySelectorAll(".msg").forEach(m=>m.textContent="")}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(b)ver(b.dataset.v)});
+const msg=(f,t,ok)=>{const m=f.querySelector(".msg");m.textContent=t;m.className="msg"+(ok?" ok":"")};
+
+V.entrar.onsubmit=async e=>{e.preventDefault();const f=e.target;
+try{await api("login",{login:f.login.value,senha:f.senha.value});location.href=nxt}catch(x){msg(f,x.message)}};
+
+V.criar.onsubmit=async e=>{e.preventDefault();const f=e.target;
+if(f.senha.value!==f.senha2.value)return msg(f,"As senhas não coincidem.");
+try{await api("cadastro",{nome:f.nome.value,cpf:f.cpf.value,email:f.email.value,tel:f.tel.value,senha:f.senha.value});location.href=nxt}catch(x){msg(f,x.message)}};
+
+/* Recuperação em 2 passos: 1) gera o código  2) confere o código e grava a nova senha */
+V.recuperar.onsubmit=async e=>{e.preventDefault();const f=e.target;
+try{
+if($("#r2").hidden){const r=await api("recup1",{login:f.login.value});rl=f.login.value;
+$("#cod").innerHTML=r.codigo_demo?`Em um sistema real o código seria enviado para <b>${esc(r.email)}</b>. Código de demonstração: <b>${r.codigo_demo}</b> (vale por 15 minutos).`:`Enviamos um código para <b>${esc(r.email)}</b>.`;
+$("#r2").hidden=false;$("#env").textContent="Redefinir senha";msg(f,"")}
+else{await api("recup2",{login:rl,codigo:f.codigo.value,nova:f.nova.value});f.reset();ver("entrar");msg(V.entrar,"Senha redefinida! Entre com a nova senha.",true)}
+}catch(x){msg(f,x.message)}};
+ver("entrar");
+})();
+</script>
+</body>
+</html>

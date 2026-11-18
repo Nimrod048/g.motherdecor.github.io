@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel administrativo — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<main class="wrap admin-main">
+<div class="barra"><h1>Acervo</h1>
+<input id="aq" type="search" placeholder="Buscar por nome, categoria ou tema" aria-label="Buscar no acervo">
+<select id="ast" aria-label="Situação"><option value="">Todas</option><option value="1">Ativas</option><option value="0">Inativas</option></select>
+<button class="btn" id="new">Nova decoração</button></div>
+<div class="tw"><table><thead><tr><th>Decoração</th><th>Categoria</th><th>Tema</th><th>Diária</th><th>Estoque <small class="nota">(reservado hoje)</small></th><th>Situação</th><th>Ações</th></tr></thead><tbody id="tb"></tbody></table></div>
+</main>
+<dialog class="frm" id="dlg"><form id="f"><h2 id="dt"></h2>
+<label>Nome<input name="nome" required maxlength="80"></label>
+<div class="dois"><label>Categoria<select name="categoria"></select></label><label>Tema do evento<select name="tema"></select></label></div>
+<div class="dois"><label>Diária (R$)<input name="preco" type="number" min="0" step="0.01" required></label><label>Saldo em estoque<input name="estoque" type="number" min="0" step="1" required></label></div>
+<label>Descrição detalhada<textarea name="descricao" rows="4" required></textarea></label>
+<label>Foto (opcional)<input name="arq" type="file" accept="image/*"></label>
+<label class="chk"><input name="ativo" type="checkbox"> Ativa no catálogo</label>
+<div class="fim"><button type="button" class="btn sec" id="cancel">Cancelar</button><button class="btn">Salvar</button></div></form></dialog>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("admin");
+if(!guarda(U))return;
+const A={q:"",st:""};let L=[],editId=null,fotoData="";
+const f=$("#f");
+async function carregar(){
+try{const d=await api("itens",undefined,{todos:1});CATS=d.categorias;L=d.itens;
+f.categoria.innerHTML=opts(CATS.map(c=>c.nome));f.tema.innerHTML=opts(d.temas);rows()}catch(e){toast(e.message)}}
+function rows(){
+const l=L.filter(i=>(!A.st||(A.st==="1")===!!+i.ativo)&&(!A.q||norm([i.nome,i.categoria,i.tema].join(" ")).includes(norm(A.q))));
+$("#tb").innerHTML=l.length?l.map(i=>`<tr><td><span class="mini" style="${bg(i)}">${+i.foto?"":emoji(i.categoria)}</span>${esc(i.nome)}</td><td>${esc(i.categoria)}</td><td>${esc(i.tema)}</td><td>${brl(i.preco)}</td><td>${i.estoque} <small class="nota">(${i.reservado_hoje} reservado hoje)</small></td><td class="st ${+i.ativo?"ok":"no"}">${+i.ativo?"Ativa":"Inativa"}</td><td><div class="acoes"><button class="btn sec sm" data-a="edit" data-id="${i.id}">Editar</button><button class="btn sec sm" data-a="tog" data-id="${i.id}">${+i.ativo?"Inativar":"Ativar"}</button></div></td></tr>`).join(""):`<tr><td colspan="7" class="vazio">Nenhuma decoração encontrada.</td></tr>`}
+function openForm(i){editId=i?i.id:null;fotoData="";$("#dt").textContent=i?"Editar decoração":"Nova decoração";f.reset();
+f.nome.value=i?i.nome:"";f.categoria.value=i?i.categoria:CATS[0].nome;f.tema.value=i?i.tema:f.tema.options[0].value;f.preco.value=i?i.preco:"";f.estoque.value=i?i.estoque:"";f.descricao.value=i?i.descricao:"";f.ativo.checked=i?!!+i.ativo:true;$("#dlg").showModal()}
+$("#aq").oninput=e=>{A.q=e.target.value;rows()};
+$("#ast").onchange=e=>{A.st=e.target.value;rows()};
+$("#new").onclick=()=>openForm(null);
+$("#cancel").onclick=()=>$("#dlg").close();
+$("#tb").onclick=async e=>{const b=e.target.closest("button");if(!b)return;const i=L.find(x=>x.id===+b.dataset.id);
+if(b.dataset.a==="edit")openForm(i);
+else try{await api("item_ativo",{id:i.id,ativo:!+i.ativo});toast(+i.ativo?"Decoração inativada":"Decoração ativada");carregar()}catch(x){toast(x.message)}};
+f.arq.onchange=e=>{const fl=e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,480/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*s;c.height=im.height*s;c.getContext("2d").drawImage(im,0,0,c.width,c.height);fotoData=c.toDataURL("image/jpeg",.72)};im.src=r.result};r.readAsDataURL(fl)};
+f.onsubmit=async e=>{e.preventDefault();
+try{await api("item_salvar",{id:editId,nome:f.nome.value,categoria:f.categoria.value,tema:f.tema.value,preco:f.preco.value,estoque:f.estoque.value,descricao:f.descricao.value,ativo:f.ativo.checked,foto:fotoData||null});
+$("#dlg").close();toast(editId?"Alterações salvas":"Decoração cadastrada");carregar()}catch(x){toast(x.message)}};
+carregar();
+})();
+</script>
+</body>
+</html>

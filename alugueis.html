@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aluguéis — Painel administrativo — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<main class="wrap admin-main">
+<h1 style="font:700 2.1rem var(--serif);margin:0 0 1rem">Aluguéis</h1>
+<section class="filtros" aria-label="Filtros">
+<label>Cliente ou nº do pedido<input id="fq" type="search" placeholder="Nome, e-mail ou número"></label>
+<label>Status<select id="fs"></select></label>
+<label>Evento a partir de<input id="fa" type="date"></label>
+<label>Evento até<input id="fb" type="date"></label>
+<button class="btn sec" id="clr">Limpar filtros</button>
+</section>
+<div class="tw largo mt"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Período</th><th>Total</th><th>Status</th><th>Pagamento</th><th>Vistoria</th></tr></thead><tbody id="tb"></tbody></table></div>
+</main>
+<dialog class="frm" id="vd"><div id="vb"></div></dialog>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+const U=await layout("alugueis");
+if(!guarda(U))return;
+const A={q:"",s:"",a:"",b:""};let L=[],vr=null,tm;
+$("#fs").innerHTML=opts(STATUS,"","Todos");
+/* os filtros (cliente, status e datas do evento) são aplicados no MySQL */
+async function carregar(){try{L=await api("alugueis",undefined,{q:A.q,status:A.s,de:A.a,ate:A.b});rows()}catch(e){toast(e.message)}}
+function rows(){
+$("#tb").innerHTML=L.length?L.map(r=>{const pode=r.status==="Em Trânsito"||r.status==="Concluído",vd=!!r.v_data;
+return `<tr><td>#${r.id}</td><td>${esc(r.cliente)}<br><small class="nota">${esc(r.email)}</small></td><td>${r.itens.map(x=>`${x.qtd}× ${esc(x.nome)}`).join("<br>")}</td><td>${fd(r.inicio)} a ${fd(r.fim)}<br><small class="nota">${dias(r.inicio,r.fim)} diária(s) · ${esc(r.cidade)}/${esc(r.uf)}</small></td><td>${brl(r.total)}<br><small class="nota">frete ${brl(+r.frete_entrega + +r.frete_coleta)}</small></td><td><select class="sst" data-id="${r.id}" aria-label="Status do pedido ${r.id}">${opts(STATUS,r.status)}</select></td><td>${esc(r.metodo)}<br><small class="${r.pg_status==="Aprovado"?"ok":"no"}">${esc(r.pg_status)}</small>${r.pg_status==="Pendente"?`<br><button class="btn sec sm" data-pg="${r.id}">Confirmar pagamento</button>`:""}</td><td>${pode?`<button class="btn sec sm" data-vi="${r.id}">${vd?"Ver vistoria":"Registrar vistoria"}</button>`:"—"}${vd&&+r.cob>0?`<br><small class="${+r.cob_paga?"ok":"no"}">Cobrança ${brl(r.cob)} · ${+r.cob_paga?"paga":"pendente"}</small>`:""}</td></tr>`}).join(""):`<tr><td colspan="8" class="vazio">Nenhum aluguel encontrado.</td></tr>`}
+const filtra=()=>{clearTimeout(tm);tm=setTimeout(carregar,250)};
+$("#fq").oninput=e=>{A.q=e.target.value;filtra()};
+$("#fs").onchange=e=>{A.s=e.target.value;carregar()};
+$("#fa").oninput=e=>{A.a=e.target.value;carregar()};
+$("#fb").oninput=e=>{A.b=e.target.value;carregar()};
+$("#clr").onclick=()=>{Object.assign(A,{q:"",s:"",a:"",b:""});["fq","fs","fa","fb"].forEach(id=>$("#"+id).value="");carregar()};
+$("#tb").onchange=async e=>{const s=e.target.closest(".sst");if(!s)return;
+try{await api("status",{id:+s.dataset.id,status:s.value});toast(`Pedido #${s.dataset.id}: ${s.value}`)}catch(x){toast(x.message)}carregar()};
+$("#tb").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
+if(b.dataset.vi)vistoria(L.find(x=>x.id==b.dataset.vi));
+if(b.dataset.pg){try{await api("pagar",{id:+b.dataset.pg});toast("Pagamento confirmado — pedido Confirmado");carregar()}catch(x){toast(x.message)}}};
+
+/* Vistoria de retorno */
+function vistoria(r){vr=r;const vd=!!r.v_data;
+$("#vb").innerHTML=`<h2>Vistoria — pedido #${r.id}</h2><p class="nota">${esc(r.cliente)} · ${fd(r.inicio)} a ${fd(r.fim)}</p>`+(vd?
+`<p><strong>Registrada em ${fd(r.v_data)}.</strong></p><ul>${r.itens.map(x=>`<li>${esc(x.nome)}: ${x.av} avariada(s) de ${x.qtd}</li>`).join("")}</ul><p>${esc(r.v_obs||"Sem observações.")}</p>${+r.cob>0?`<p class="${+r.cob_paga?"ok":"no"}">Cobrança complementar: <strong>${brl(r.cob)}</strong> — ${esc(r.cob_motivo)} (${+r.cob_paga?"paga":"pendente"})</p>`:""}<div class="fim">${+r.cob>0&&!+r.cob_paga?`<a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/55${(r.tel||"").replace(/\D/g,"")}?text=${encodeURIComponent(`Olá, ${r.cliente}! Na vistoria do pedido #${r.id} da MotherDecor identificamos avarias (${r.cob_motivo}). Foi gerada uma cobrança complementar de ${brl(r.cob)}.`)}">Avisar cliente (WhatsApp)</a><button class="btn" id="paga">Marcar como paga</button>`:""}<button class="btn sec" id="fch">Fechar</button></div>`
+:`<form id="vf"><div style="display:grid;gap:.6rem">${r.itens.map(x=>`<label>${esc(x.nome)} — ${x.qtd} alugada(s)<span><input type="number" min="0" max="${x.qtd}" value="0" data-id="${x.id}" class="av"> <span class="nota">unidades avariadas</span></span></label>`).join("")}</div><label>Observações sobre o retorno e as avarias<textarea name="obs" rows="3" placeholder="Ex.: 2 balões estourados, arranhão na base do painel"></textarea></label><label class="chk"><input type="checkbox" name="baixa"> Dar baixa das unidades avariadas no estoque</label><div class="dois"><label>Cobrança complementar (R$)<input name="valor" type="number" min="0" step="0.01" value="0"></label><label>Motivo da cobrança<input name="motivo" placeholder="Ex.: reposição de balões"></label></div><p class="nota">Ao salvar, o pedido passa para <b>Concluído</b>.</p><div class="fim"><button type="button" class="btn sec" id="fch">Cancelar</button><button class="btn">Salvar vistoria</button></div></form>`);
+$("#vd").showModal()}
+$("#vd").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;
+if(b.id==="fch")$("#vd").close();
+if(b.id==="paga"){try{await api("cobranca_paga",{id:vr.id});$("#vd").close();toast("Cobrança marcada como paga");carregar()}catch(x){toast(x.message)}}});
+$("#vd").addEventListener("submit",async e=>{e.preventDefault();const f=e.target;
+try{await api("vistoria",{id:vr.id,itens:[...f.querySelectorAll(".av")].map(x=>({id:+x.dataset.id,av:+x.value||0})),obs:f.obs.value,baixa:f.baixa.checked,valor:+f.valor.value||0,motivo:f.motivo.value});
+$("#vd").close();toast("Vistoria registrada");carregar()}catch(x){toast(x.message)}});
+carregar();
+})();
+</script>
+</body>
+</html>

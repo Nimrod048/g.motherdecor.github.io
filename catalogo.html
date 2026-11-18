@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo — MotherDecor</title>
+<link rel="icon" href="images/logo.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topo"></header>
+<div class="wrap pg"><h1>Catálogo de decorações</h1><p>Informe as datas do evento para ver a disponibilidade e toque em uma decoração para ver os detalhes.</p></div>
+<main class="wrap">
+<section class="periodo" aria-label="Datas do evento">
+<div><strong>Datas do evento</strong><span class="nota">Informe o início e o fim para ver o que está disponível no período.</span></div>
+<label>Início<input id="di" type="date"></label>
+<label>Fim<input id="df" type="date"></label>
+<label class="chk"><input id="so" type="checkbox"> Mostrar só disponíveis</label>
+</section>
+<p id="per" aria-live="polite"></p>
+<section class="filtros" aria-label="Busca e filtros">
+<label>Buscar<input id="q" type="search" placeholder="Ex.: arco, floral, safari"></label>
+<label>Categoria<select id="fc"></select></label>
+<label>Tema do evento<select id="ft"></select></label>
+<label>Diária a partir de (R$)<input id="fmin" type="number" min="0" inputmode="numeric"></label>
+<label>Diária até (R$)<input id="fmax" type="number" min="0" inputmode="numeric"></label>
+<button class="btn sec" id="clr">Limpar filtros</button>
+</section>
+<div id="res" aria-live="polite"></div>
+</main>
+<dialog class="det" id="det" aria-label="Detalhes da decoração"><button class="fechar" id="x" aria-label="Fechar">×</button><div id="dc"></div></dialog>
+<footer id="rodape"></footer>
+<script src="app.js"></script>
+<script>
+(async()=>{
+await layout("catalogo");
+const P=new URLSearchParams(location.search),C0=cart();
+const F={q:P.get("q")||"",cat:P.get("categoria")||"",tema:P.get("tema")||"",min:"",max:"",di:P.get("di")||C0.inicio||"",df:P.get("df")||C0.fim||"",so:false};
+let L=[],LP=null,TH=[],seq=0,primeira=true;
+$("#res").innerHTML=`<p class="vazio">Carregando…</p>`;
+function campos(){$("#q").value=F.q;$("#fc").innerHTML=opts(CATS.map(c=>c.nome),F.cat,"Todas");$("#ft").innerHTML=opts(TH,F.tema,"Todos");$("#fmin").value=F.min;$("#fmax").value=F.max;$("#di").value=F.di;$("#df").value=F.df;$("#so").checked=F.so;$("#di").min=hoje();$("#df").min=F.di||hoje()}
+
+/* período do evento: null (sem datas), {erro} ou {a,b,n} */
+function periodo(){const a=F.di,b=F.df;
+if(!a&&!b)return null;
+if(!a||!b)return{erro:"Informe as duas datas (início e fim) para ver a disponibilidade."};
+if(a<hoje())return{erro:"A data de início não pode ser anterior a hoje."};
+if(b<a)return{erro:"A data final deve ser igual ou posterior à data inicial."};
+if(dias(a,b)>60)return{erro:"O período máximo é de 60 dias."};
+return{a,b,n:dias(a,b)}}
+const msgPer=p=>$("#per").innerHTML=p?(p.erro?`<span class="no">${p.erro}</span>`:`Disponibilidade para <strong>${fd(p.a)} a ${fd(p.b)}</strong> · ${p.n} ${p.n>1?"diárias":"diária"}. Os números vêm do banco de dados e são atualizados em tempo real.`):"";
+
+/* busca os itens no servidor; com datas válidas a API já devolve a disponibilidade (campo disp) de cada item */
+async function carregar(){
+const n=++seq,p0=periodo(),p=p0&&!p0.erro?p0:null;msgPer(p0);
+try{const d=await api("itens",undefined,p?{inicio:p.a,fim:p.b}:undefined);if(n!==seq)return;
+CATS=d.categorias;TH=d.temas;L=d.itens;LP=p;
+if(primeira){primeira=false;campos()}
+if(p){const c=cart();c.inicio=p.a;c.fim=p.b;setCart(c)}
+res()}catch(e){$("#res").innerHTML=`<p class="vazio">${esc(e.message)}</p>`}}
+
+[["q","q"],["fmin","min"],["fmax","max"]].forEach(([id,k])=>$("#"+id).oninput=e=>{F[k]=e.target.value;res()});
+[["di","di"],["df","df"]].forEach(([id,k])=>$("#"+id).oninput=e=>{F[k]=e.target.value;$("#df").min=F.di||hoje();carregar()});
+[["fc","cat"],["ft","tema"]].forEach(([id,k])=>$("#"+id).onchange=e=>{F[k]=e.target.value;res()});
+$("#so").onchange=e=>{F.so=e.target.checked;res()};
+$("#clr").onclick=()=>{Object.assign(F,{q:"",cat:"",tema:"",min:"",max:"",di:"",df:"",so:false});campos();carregar()};
+
+function card(i,p){const n=p?i.disp:i.estoque,d=n>0;
+const t=p?(d?`${n} ${n>1?"disponíveis":"disponível"}`:"Indisponível nas datas"):(d?"Disponível":"Indisponível");
+return `<a class="card" href="#" data-id="${i.id}"><div class="foto" style="${bg(i)}">${+i.foto?"":emoji(i.categoria)}</div><div class="corpo"><span class="tag">${esc(i.tema)}</span><h3>${esc(i.nome)}</h3><p>${esc(i.descricao)}</p><div class="preco"><strong>${brl(i.preco)} <small>/diária</small></strong><span class="${d?"ok":"no"}">${t}</span></div></div></a>`}
+
+function res(){
+const p=LP;
+const l=L.filter(i=>(!F.cat||i.categoria===F.cat)&&(!F.tema||i.tema===F.tema)&&(F.min===""||i.preco>=+F.min)&&(F.max===""||i.preco<=+F.max)&&(!F.q||norm([i.nome,i.descricao,i.tema,i.categoria].join(" ")).includes(norm(F.q)))&&(!(p&&F.so)||i.disp>0));
+$("#res").innerHTML=l.length?CATS.filter(c=>l.some(i=>i.categoria===c.nome)).map(c=>{const g=l.filter(i=>i.categoria===c.nome);return `<section><h2>${esc(c.nome)}<small>${g.length} ${g.length>1?"itens":"item"}</small></h2><div class="grade">${g.map(i=>card(i,p)).join("")}</div></section>`}).join(""):`<p class="vazio">Nenhuma decoração encontrada. Ajuste a busca, as datas ou os filtros.</p>`}
+
+function abrir(id){
+const i=L.find(x=>x.id===id);if(!i)return;
+const p=LP,n=p?i.disp:i.estoque,ja=cart().itens[id]||0,mx=n-ja;
+const msg=`Olá! Vi a decoração “${i.nome}” no site da MotherDecor e gostaria de alugar${p?` de ${fd(p.a)} a ${fd(p.b)}`:""}.`;
+let rs;
+if(!p)rs=`<p class="nota">Informe as datas do evento no topo do catálogo para ver a disponibilidade e adicionar ao carrinho.</p>`;
+else if(n<1)rs=`<p class="no"><strong>Sem unidades disponíveis</strong> de ${fd(p.a)} a ${fd(p.b)}. Tente outras datas.</p>`;
+else if(mx<1)rs=`<p class="ok">Você já adicionou ao carrinho todas as unidades disponíveis.</p><a class="btn" href="carrinho.html">Ver carrinho</a>`;
+else rs=`<div class="resv"><p class="ok"><strong>${n} ${n>1?"unidades disponíveis":"unidade disponível"}</strong> de ${fd(p.a)} a ${fd(p.b)} (${p.n} ${p.n>1?"diárias":"diária"}).${ja?` ${ja} já no carrinho.`:""}</p><label>Quantidade<input id="qtd" type="number" min="1" max="${mx}" value="1"></label><p class="total" id="tot"></p><button class="btn" id="add">Adicionar ao carrinho</button></div>`;
+$("#dc").innerHTML=`<div class="det-in"><div class="foto" style="${bg(i)}">${+i.foto?"":emoji(i.categoria)}</div><div class="info"><span class="tag">${esc(i.tema)}</span><h2>${esc(i.nome)}</h2><p>${esc(i.descricao)}</p><dl class="dados"><dt>Categoria</dt><dd>${esc(i.categoria)}</dd><dt>Tema do evento</dt><dd>${esc(i.tema)}</dd><dt>Valor</dt><dd>${brl(i.preco)} por diária</dd><dt>Estoque total</dt><dd>${i.estoque} ${i.estoque===1?"unidade":"unidades"}</dd></dl>${rs}<a class="btn wa" target="_blank" rel="noopener" href="${waLink(msg)}">${ICON_WA} Alugar pelo WhatsApp</a><span class="nota">Prefere conversar? Combine entrega e disponibilidade pelo WhatsApp.</span></div></div>`;
+const q=$("#qtd");
+if(q){const t=()=>$("#tot").textContent=`Subtotal do período: ${brl((Math.max(1,Math.floor(+q.value))||1)*i.preco*p.n)}`;q.oninput=t;t();
+$("#add").onclick=()=>{const k=Math.floor(+q.value);if(!(k>=1&&k<=mx))return toast(`Escolha entre 1 e ${mx} unidade(s).`);
+const c=cart();c.inicio=p.a;c.fim=p.b;c.itens[id]=ja+k;setCart(c);atualizaCarrinho();$("#det").close();toast("Adicionado ao carrinho")}}
+if(!$("#det").open)$("#det").showModal()}
+
+$("#res").onclick=e=>{const a=e.target.closest(".card");if(a){e.preventDefault();abrir(+a.dataset.id)}};
+$("#x").onclick=()=>$("#det").close();
+$("#det").onclick=e=>{if(e.target===$("#det"))$("#det").close()};
+await carregar();
+setInterval(carregar,15000); // atualiza a disponibilidade a cada 15 s
+})();
+</script>
+</body>
+</html>
